@@ -1,45 +1,36 @@
-export const config = {
-  runtime: 'edge',
-};
-
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Only POST supported' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const { prompt, images, width, height, fps, duration } = await req.json();
+    console.log("Kling proxy triggered");
+    console.log("Method:", req.method);
+    console.log("Body:", req.body);
 
-    const klingKey = process.env.KLING_ACCESS_KEY;
-    const klingSecret = process.env.KLING_ACCESS_SECRET;
+    const { KLING_ACCESS_KEY, KLING_ACCESS_SECRET } = process.env;
 
-    if (!klingKey || !klingSecret) {
-      throw new Error('Missing Kling API credentials');
+    if (!KLING_ACCESS_KEY || !KLING_ACCESS_SECRET) {
+      console.error("Missing Kling API credentials");
+      return res.status(500).json({ error: "Kling API credentials are missing" });
     }
 
-    const klingRes = await fetch('https://api.klingai.com/v1/video/submit/async', {
-      method: 'POST',
+    const response = await fetch("https://api.klingai.com/v1/video/submit/async", {
+      method: "POST",
       headers: {
-        'X-Access-Key': klingKey,
-        'X-Access-Secret': klingSecret,
-        'Content-Type': 'application/json',
+        "X-Access-Key": KLING_ACCESS_KEY,
+        "X-Access-Secret": KLING_ACCESS_SECRET,
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({ prompt, images, width, height, fps, duration }),
+      body: JSON.stringify(req.body),
     });
 
-    const data = await klingRes.json();
+    const data = await response.json();
+    console.log("Kling response:", data);
 
-    return new Response(JSON.stringify(data), {
-      status: klingRes.status,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    if (!response.ok) {
+      return res.status(500).json({ error: "Kling API error", details: data });
+    }
+
+    return res.status(200).json(data);
   } catch (err) {
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    console.error("Unhandled error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 }
